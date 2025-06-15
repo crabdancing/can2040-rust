@@ -1,16 +1,13 @@
-extern crate alloc;
-
-use alloc::fmt;
-use heapless::mpmc::MpMcQueue;
 use core::cell::RefCell;
+use heapless::mpmc::MpMcQueue;
 
 use cortex_m::asm::wfi;
 use cortex_m::interrupt::Mutex;
 use defmt::{debug, Format};
 use embedded_can::{ErrorKind, ExtendedId, Id, StandardId};
-use rp2040_hal::gpio::{FunctionNull, PinId, PullNone};
-use rp2040_hal::pac::interrupt;
-use rp2040_hal::{gpio::Pin, pac};
+
+use embassy_rp::interrupt::{InterruptExt};
+use embassy_rp::interrupt;
 
 use crate::core::can2040_lib::{
     can2040, can2040_bitunstuffer, can2040_callback_config, can2040_check_transmit, can2040_msg,
@@ -87,20 +84,6 @@ impl embedded_can::Error for CanError {
     }
 }
 
-impl fmt::Debug for can2040_msg {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe {
-            write!(
-                f,
-                "can2040_msg(D) {{ id: {:x?}, dlc: {:x?}, data: {:x?} }}",
-                self.id,
-                self.dlc,
-                &self.__bindgen_anon_1.data[..self.dlc as usize]
-            )
-        }
-    }
-}
-
 impl defmt::Format for can2040_msg {
     fn format(&self, f: defmt::Formatter) {
         unsafe {
@@ -115,7 +98,7 @@ impl defmt::Format for can2040_msg {
     }
 }
 
-#[derive(Clone, Debug, Format)]
+#[derive(Clone, Format)]
 pub struct CanFrame(can2040_msg);
 const CAN2040_ID_RTR: u32 = 1 << 30;
 const CAN2040_ID_EFF: u32 = 1 << 31;
@@ -170,7 +153,8 @@ impl embedded_can::Frame for CanFrame {
     }
 }
 
-static RECEIVE_QUEUE: Mutex<RefCell<MpMcQueue<CanFrame,128>>> = Mutex::new(RefCell::new(MpMcQueue::new()));
+static RECEIVE_QUEUE: Mutex<RefCell<MpMcQueue<CanFrame, 128>>> =
+    Mutex::new(RefCell::new(MpMcQueue::new()));
 
 unsafe extern "C" fn can2040_cb(_cd: *mut can2040, notify: u32, msg: *mut can2040_msg) {
     debug!("can2040_cb(), notify = {:x}, msg = {:?}", notify, *msg);
@@ -230,9 +214,9 @@ impl embedded_can::blocking::Can for Can2040 {
 
     fn receive(&mut self) -> Result<Self::Frame, Self::Error> {
         loop {
-            if let Some(received_msg) = cortex_m::interrupt::free(|cs| {
-                RECEIVE_QUEUE.borrow(cs).borrow_mut().dequeue()
-            }) {
+            if let Some(received_msg) =
+                cortex_m::interrupt::free(|cs| RECEIVE_QUEUE.borrow(cs).borrow_mut().dequeue())
+            {
                 return Ok(received_msg);
             }
 
@@ -260,36 +244,8 @@ fn PIO0_IRQ_0() {
 /// for Can2040. Additionally, when enabling Can2040, we forcibly set the
 /// priority of Can2040 to 0 to ensure that communication interrupts can
 /// receive the most real-time response.
-#[deprecated(note = "does not use hal for pins, use Can2040::new instead")]
-pub fn initialize_cbus(
-    core: &mut cortex_m::Peripherals,
-    baud_rate: u32,
-    can_rx_id: u32,
-    can_tx_id: u32,
-) -> Can2040 {
-    unsafe {
-        assert!(CBUS.is_none());
-        CBUS = Some(can2040::new());
-        let cbus = CBUS.as_mut().unwrap();
-        let cbus_ptr = &mut *cbus as *mut _;
-        can2040_setup(cbus_ptr, 0);
-        can2040_callback_config(cbus_ptr, Some(can2040_cb));
-        can2040_start(cbus_ptr, RP2040_SYS_FREQ, baud_rate, can_rx_id, can_tx_id);
-
-        // Enable interrupts and set priority for it.
-        core.NVIC.set_priority(pac::Interrupt::PIO0_IRQ_0, 0);
-        pac::NVIC::unmask(pac::Interrupt::PIO0_IRQ_0);
-        Can2040 {}
-    }
-}
-
 impl Can2040 {
-    pub fn new<RX: PinId, TX: PinId>(
-        core: &mut cortex_m::Peripherals,
-        baud_rate: u32,
-        can_rx: Pin<RX, FunctionNull, PullNone>,
-        can_tx: Pin<TX, FunctionNull, PullNone>,
-    ) -> Self {
+    pub fn new(baud_rate: u32, can_rx: u32, can_tx: u32) -> Self {
         unsafe {
             assert!(CBUS.is_none());
             CBUS = Some(can2040::new());
@@ -297,17 +253,13 @@ impl Can2040 {
             let cbus_ptr = &mut *cbus as *mut _;
             can2040_setup(cbus_ptr, 0);
             can2040_callback_config(cbus_ptr, Some(can2040_cb));
-            can2040_start(
-                cbus_ptr,
-                RP2040_SYS_FREQ,
-                baud_rate,
-                can_rx.id().num as u32,
-                can_tx.id().num as u32,
-            );
+            can2040_start(cbus_ptr, RP2040_SYS_FREQ, baud_rate, can_rx, can_tx);
 
             // Enable interrupts and set priority for it.
-            core.NVIC.set_priority(pac::Interrupt::PIO0_IRQ_0, 0);
-            pac::NVIC::unmask(pac::Interrupt::PIO0_IRQ_0);
+            // core.NVIC.set_priority(pac::Interrupt::PIO0_IRQ_0, 0);
+            // pac::NVIC::unmask(pac::Interrupt::PIO0_IRQ_0);
+            interrupt::PIO0_IRQ_0.set_priority(interrupt::Priority::P0);
+            cortex_m::peripheral::NVIC::unmask(interrupt::PIO0_IRQ_0);
             Can2040 {}
         }
     }
