@@ -12,10 +12,11 @@ use rp2040_hal::gpio::{FunctionNull, PinId, PullNone};
 use rp2040_hal::pac::interrupt;
 use rp2040_hal::{gpio::Pin, pac};
 
+// FIX 1: Removed the duplicate `can2040_stats` from the import list.
 use crate::core::can2040_lib::{
     can2040, can2040_bitunstuffer, can2040_callback_config, can2040_check_transmit, can2040_msg,
     can2040_msg__bindgen_ty_1, can2040_pio_irq_handler, can2040_setup, can2040_start,
-    can2040_transmit, CAN2040_NOTIFY_RX,
+    can2040_stats, can2040_transmit, CAN2040_NOTIFY_RX,
 };
 
 #[allow(warnings)]
@@ -49,6 +50,13 @@ impl can2040_transmit {
     }
 }
 
+// FIX 2: Replaced the old, incorrect fields with the new, correct ones.
+impl can2040_stats {
+    pub fn new() -> Self {
+        Self { tx_attempt: 0, tx_total: 0, rx_total: 0, parse_error: 0 }
+    }
+}
+
 impl can2040 {
     pub fn new() -> Self {
         Self {
@@ -69,6 +77,7 @@ impl can2040 {
             tx_pull_pos: 0,
             tx_push_pos: 0,
             tx_queue: [can2040_transmit::new(); 4],
+            stats: can2040_stats::new(),
         }
     }
 }
