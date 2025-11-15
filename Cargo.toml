@@ -27,5 +27,5 @@ heapless = { version = "0.8.0", features = [
 ] }
 
 [build-dependencies]
-cc = "1"         # or the latest version
-bindgen = "0.69" # whatever version you’re using
+cc = "1"
+bindgen = "0.69"
