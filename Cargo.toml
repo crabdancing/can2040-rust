@@ -22,7 +22,10 @@ panic-probe = "0.3"
 nb = "1.1"
 rp2040-hal = { version = "0.10", features = ["rt", "critical-section-impl"] }
 rp-pico = "0.9"
-heapless = {version="0.8.0", features= ["portable-atomic-critical-section"]}
+heapless = { version = "0.8.0", features = [
+  "portable-atomic-critical-section",
+] }
 
 [build-dependencies]
-bindgen = "0.69"
+cc = "1"         # or the latest version
+bindgen = "0.69" # whatever version you’re using

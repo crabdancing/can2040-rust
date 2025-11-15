@@ -44,6 +44,8 @@
         flip-link
         elf2uf2-rs
         pkg-config
+        clang
+        gcc-arm-embedded
       ];
       craneLib = (crane.mkLib pkgs).overrideToolchain rust;
 

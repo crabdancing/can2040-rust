@@ -1,8 +1,8 @@
 extern crate alloc;
 
 use alloc::fmt;
-use heapless::mpmc::MpMcQueue;
 use core::cell::RefCell;
+use heapless::mpmc::MpMcQueue;
 
 use cortex_m::asm::wfi;
 use cortex_m::interrupt::Mutex;
@@ -20,7 +20,7 @@ use crate::core::can2040_lib::{
 
 #[allow(warnings)]
 mod can2040_lib {
-    include!(concat!(env!("OUT_DIR"), "/can2040_lib.rs"));
+    include!(concat!(env!("OUT_DIR"), "/can2040_bindings.rs"));
 }
 
 impl can2040_bitunstuffer {
@@ -170,7 +170,8 @@ impl embedded_can::Frame for CanFrame {
     }
 }
 
-static RECEIVE_QUEUE: Mutex<RefCell<MpMcQueue<CanFrame,128>>> = Mutex::new(RefCell::new(MpMcQueue::new()));
+static RECEIVE_QUEUE: Mutex<RefCell<MpMcQueue<CanFrame, 128>>> =
+    Mutex::new(RefCell::new(MpMcQueue::new()));
 
 unsafe extern "C" fn can2040_cb(_cd: *mut can2040, notify: u32, msg: *mut can2040_msg) {
     debug!("can2040_cb(), notify = {:x}, msg = {:?}", notify, *msg);
@@ -230,9 +231,9 @@ impl embedded_can::blocking::Can for Can2040 {
 
     fn receive(&mut self) -> Result<Self::Frame, Self::Error> {
         loop {
-            if let Some(received_msg) = cortex_m::interrupt::free(|cs| {
-                RECEIVE_QUEUE.borrow(cs).borrow_mut().dequeue()
-            }) {
+            if let Some(received_msg) =
+                cortex_m::interrupt::free(|cs| RECEIVE_QUEUE.borrow(cs).borrow_mut().dequeue())
+            {
                 return Ok(received_msg);
             }
 
